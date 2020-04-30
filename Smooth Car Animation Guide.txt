@@ -1,0 +1,261 @@
+
+
+
+1)
+
+Add the following dependency in you app level gradle file:
+
+    implementation 'com.google.android.gms:play-services-maps:16.1.0'
+   
+
+   
+
+------------------------------------------------------------------------------------------------------------
+
+2)
+
+Get Your Google Maps Api Key From Google Cloud Platform.
+  
+  1) login to your google account and follow this link: https://console.cloud.google.com/google/maps-apis/start?pli=1
+  2) Must enable Google Maps SDK.
+
+
+
+-------------------------------------------------------------------------------------------------------------
+
+3)
+
+Add the following permissions and meta-data tags in application  tag in your menifest file:
+
+	<uses-permission android:name="android.permission.INTERNET" />
+	 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+        <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    //add these meta-data in application tag
+     <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="Your Api Key" />
+       <!-- Don't use my api key, it will not work for you.-->
+
+------------------------------------------------------------------------------------------------------------
+
+
+
+4)
+
+Add the following fragment in your activity_main.xml file to show Map.
+
+    <fragment xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:id="@+id/map"
+    tools:context=".MainActivity"
+    android:name="com.google.android.gms.maps.SupportMapFragment" />
+
+
+
+------------------------------------------------------------------------------------------------------------
+
+
+5)
+
+Update the your MainActivity.java file with the following code:
+
+    
+    public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
+        //google map object
+    private GoogleMap mMap;
+    boolean locationPermission = false;
+    Location myLocation = null;
+    Location myUpdatedLocation = null;
+    float Bearing = 0;
+    boolean AnimationStatus = false;
+    static Marker carMarker;
+    Bitmap BitMapMarker;
+
+    private final static int LOCATION_REQUEST_CODE = 23;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        requestPermision();
+        BitmapDrawable bitmapdraw = (BitmapDrawable) getResources().getDrawable(R.drawable.car_marker);
+        Bitmap b = bitmapdraw.getBitmap();
+        BitMapMarker = Bitmap.createScaledBitmap(b, 110, 60, false);
+
+
+    }
+    
+    //to get user location
+    private void getMyLocation() {
+        mMap.setMyLocationEnabled(true);
+        mMap.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener() {
+            @Override
+            public void onMyLocationChange(Location location) {
+
+                if (AnimationStatus) {
+                    myUpdatedLocation = location;
+                } else {
+                    myLocation = location;
+                    myUpdatedLocation = location;
+                    LatLng latlng = new LatLng(location.getLatitude(), location.getLongitude());
+                    carMarker = mMap.addMarker(new MarkerOptions().position(latlng).
+                            flat(true).icon(BitmapDescriptorFactory.fromBitmap(BitMapMarker)));
+                    CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(
+                            latlng, 17f);
+                    mMap.animateCamera(cameraUpdate);
+                }
+                Bearing = location.getBearing();
+                LatLng updatedLatLng = new LatLng(myUpdatedLocation.getLatitude(), myUpdatedLocation.getLongitude());
+                changePositionSmoothly(carMarker, updatedLatLng, Bearing);
+
+            }
+        });
+    }
+
+
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+
+        mMap = googleMap;
+        getMyLocation();
+    }
+
+    void changePositionSmoothly(final Marker myMarker, final LatLng newLatLng, final Float bearing) {
+
+        final LatLng startPosition = new LatLng(myLocation.getLatitude(), myLocation.getLongitude());
+        final LatLng finalPosition = newLatLng;
+        final Handler handler = new Handler();
+        final long start = SystemClock.uptimeMillis();
+        final Interpolator interpolator = new AccelerateDecelerateInterpolator();
+        final float durationInMs = 3000;
+        final boolean hideMarker = false;
+
+        handler.post(new Runnable() {
+            long elapsed;
+            float t;
+            float v;
+
+            @Override
+            public void run() {
+                myMarker.setRotation(bearing);
+                // Calculate progress using interpolator
+                elapsed = SystemClock.uptimeMillis() - start;
+                t = elapsed / durationInMs;
+                v = interpolator.getInterpolation(t);
+
+                LatLng currentPosition = new LatLng(
+                        startPosition.latitude * (1 - t) + finalPosition.latitude * t,
+                        startPosition.longitude * (1 - t) + finalPosition.longitude * t);
+
+                myMarker.setPosition(currentPosition);
+
+                // Repeat till progress is complete.
+                if (t < 1) {
+                    // Post again 16ms later.
+                    handler.postDelayed(this, 16);
+                } else {
+                    if (hideMarker) {
+                        myMarker.setVisible(false);
+                    } else {
+                        myMarker.setVisible(true);
+                    }
+                }
+                myLocation.setLatitude(newLatLng.latitude);
+                myLocation.setLongitude(newLatLng.longitude);
+            }
+        });
+    }
+
+    private void requestPermision() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+                    LOCATION_REQUEST_CODE);
+        } else {
+            LocationstatusCheck();
+            locationPermission = true;
+            //init google map fragment to show map.
+            SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                    .findFragmentById(R.id.map);
+            mapFragment.getMapAsync(this);
+
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        switch (requestCode) {
+            case LOCATION_REQUEST_CODE: {
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    LocationstatusCheck();
+                    //if permission granted.
+                    locationPermission = true;
+                    //init google map fragment to show map.
+                    SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                            .findFragmentById(R.id.map);
+                    mapFragment.getMapAsync(this);
+                    // getMyLocation();
+
+                } else {
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                }
+                return;
+            }
+        }
+    }
+
+
+    public void LocationstatusCheck() {
+        final LocationManager manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            buildAlertMessageNoGps();
+
+        }
+    }
+
+    private void buildAlertMessageNoGps() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("Your GPS seems to be disabled, do you want to enable it?")
+                .setCancelable(false)
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    }
+                })
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+        final AlertDialog alert = builder.create();
+        alert.show();
+    }
+   
+  }
+   
+-----------------------------------------------------------------------------------------------------------------
+
+6)
+
+Add Car Marker image in your Drawable Folder.
+
+
+
+
+------------------------------------------------------------------------------------------------------------------
+
+7)
+
+ Test your App and Enjoy :)
+
+
+
+
